@@ -50,9 +50,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="mt-6 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
-          Made with <span className="text-pink-300">♥</span> by Visily
-        </div>
+
       </div>
     </footer>
   );

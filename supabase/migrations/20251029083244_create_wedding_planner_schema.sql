@@ -1,102 +1,31 @@
 /*
-  # Create Wedding Planner Schema
+  # DreamDay Wedding Planner Schema (Supabase-Safe)
 
-  ## Overview
-  This migration creates the complete database schema for the DreamDay wedding planner application.
-  All tables are protected with Row Level Security (RLS) to ensure users can only access their own data.
-
-  ## New Tables
-  
-  ### 1. `profiles`
-  User profile information extending Supabase auth.users
-  - `id` (uuid, primary key, references auth.users)
-  - `full_name` (text)
-  - `wedding_date` (date, nullable)
-  - `partner_name` (text, nullable)
-  - `budget_total` (numeric, default 25000)
-  - `created_at` (timestamptz)
-  - `updated_at` (timestamptz)
-
-  ### 2. `tasks`
-  Wedding planning tasks and checklist items
-  - `id` (uuid, primary key)
-  - `user_id` (uuid, references profiles)
-  - `title` (text)
-  - `description` (text, nullable)
-  - `due_date` (date, nullable)
-  - `priority` (text: 'High Priority', 'Medium Priority', 'Low Priority')
-  - `category` (text)
-  - `completed` (boolean, default false)
-  - `created_at` (timestamptz)
-  - `updated_at` (timestamptz)
-
-  ### 3. `expenses`
-  Budget tracking and expense management
-  - `id` (uuid, primary key)
-  - `user_id` (uuid, references profiles)
-  - `category` (text)
-  - `item` (text)
-  - `estimated` (numeric)
-  - `actual` (numeric, default 0)
-  - `status` (text: 'Paid', 'Pending', 'Overdue')
-  - `created_at` (timestamptz)
-  - `updated_at` (timestamptz)
-
-  ### 4. `guests`
-  Guest list management
-  - `id` (uuid, primary key)
-  - `user_id` (uuid, references profiles)
-  - `name` (text)
-  - `email` (text, nullable)
-  - `phone` (text, nullable)
-  - `rsvp_status` (text: 'Pending', 'Accepted', 'Declined')
-  - `plus_one` (boolean, default false)
-  - `dietary_restrictions` (text, nullable)
-  - `created_at` (timestamptz)
-  - `updated_at` (timestamptz)
-
-  ### 5. `vendors`
-  Saved vendor contacts and information
-  - `id` (uuid, primary key)
-  - `user_id` (uuid, references profiles)
-  - `name` (text)
-  - `category` (text)
-  - `email` (text, nullable)
-  - `phone` (text, nullable)
-  - `website` (text, nullable)
-  - `notes` (text, nullable)
-  - `status` (text: 'Interested', 'Contacted', 'Booked')
-  - `created_at` (timestamptz)
-  - `updated_at` (timestamptz)
-
-  ### 6. `gallery_items`
-  Saved inspiration photos and wedding gallery
-  - `id` (uuid, primary key)
-  - `user_id` (uuid, references profiles)
-  - `title` (text)
-  - `image_url` (text)
-  - `category` (text)
-  - `notes` (text, nullable)
-  - `is_favorite` (boolean, default false)
-  - `created_at` (timestamptz)
-
-  ### 7. `contact_submissions`
-  Contact form submissions
-  - `id` (uuid, primary key)
-  - `name` (text)
-  - `email` (text)
-  - `message` (text)
-  - `created_at` (timestamptz)
-
-  ## Security
-  - All user-specific tables have RLS enabled
-  - Policies ensure users can only access their own data
-  - Authenticated users required for all operations
-  - Contact submissions are insert-only for public users
+  ✅ Fully compatible with Supabase
+  ✅ Uses Row Level Security (RLS)
+  ✅ Automatically generates UUIDs
+  ✅ Automatically updates timestamps
+  ✅ Creates user profile upon signup
 */
 
--- Create profiles table
-CREATE TABLE IF NOT EXISTS profiles (
+-- Enable UUID generation
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- =====================================================
+-- Shared helper function to auto-update timestamps
+-- =====================================================
+CREATE OR REPLACE FUNCTION public.update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
+-- 1. Profiles
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name text,
   wedding_date date,
@@ -106,28 +35,26 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own profile"
-  ON profiles FOR SELECT
-  TO authenticated
-  USING (auth.uid() = id);
-
-CREATE POLICY "Users can update own profile"
-  ON profiles FOR UPDATE
-  TO authenticated
+-- Combined RLS policies (simplified)
+CREATE POLICY "Users manage own profile"
+  ON public.profiles
   USING (auth.uid() = id)
   WITH CHECK (auth.uid() = id);
 
-CREATE POLICY "Users can insert own profile"
-  ON profiles FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = id);
+-- Auto-update timestamp
+CREATE TRIGGER update_profiles_timestamp
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_timestamp();
 
--- Create tasks table
-CREATE TABLE IF NOT EXISTS tasks (
+-- =====================================================
+-- 2. Tasks
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
   title text NOT NULL,
   description text,
   due_date date,
@@ -138,33 +65,27 @@ CREATE TABLE IF NOT EXISTS tasks (
   updated_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own tasks"
-  ON tasks FOR SELECT
-  TO authenticated
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own tasks"
-  ON tasks FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own tasks"
-  ON tasks FOR UPDATE
-  TO authenticated
+CREATE POLICY "Users manage own tasks"
+  ON public.tasks
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can delete own tasks"
-  ON tasks FOR DELETE
-  TO authenticated
-  USING (auth.uid() = user_id);
+CREATE TRIGGER update_tasks_timestamp
+  BEFORE UPDATE ON public.tasks
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_timestamp();
 
--- Create expenses table
-CREATE TABLE IF NOT EXISTS expenses (
+CREATE INDEX IF NOT EXISTS tasks_user_id_idx ON public.tasks(user_id);
+CREATE INDEX IF NOT EXISTS tasks_completed_idx ON public.tasks(completed);
+
+-- =====================================================
+-- 3. Expenses
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.expenses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
   category text NOT NULL,
   item text NOT NULL,
   estimated numeric DEFAULT 0,
@@ -174,33 +95,26 @@ CREATE TABLE IF NOT EXISTS expenses (
   updated_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own expenses"
-  ON expenses FOR SELECT
-  TO authenticated
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own expenses"
-  ON expenses FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own expenses"
-  ON expenses FOR UPDATE
-  TO authenticated
+CREATE POLICY "Users manage own expenses"
+  ON public.expenses
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can delete own expenses"
-  ON expenses FOR DELETE
-  TO authenticated
-  USING (auth.uid() = user_id);
+CREATE TRIGGER update_expenses_timestamp
+  BEFORE UPDATE ON public.expenses
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_timestamp();
 
--- Create guests table
-CREATE TABLE IF NOT EXISTS guests (
+CREATE INDEX IF NOT EXISTS expenses_user_id_idx ON public.expenses(user_id);
+
+-- =====================================================
+-- 4. Guests
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.guests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
   name text NOT NULL,
   email text,
   phone text,
@@ -211,33 +125,27 @@ CREATE TABLE IF NOT EXISTS guests (
   updated_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE guests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.guests ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own guests"
-  ON guests FOR SELECT
-  TO authenticated
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own guests"
-  ON guests FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own guests"
-  ON guests FOR UPDATE
-  TO authenticated
+CREATE POLICY "Users manage own guests"
+  ON public.guests
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can delete own guests"
-  ON guests FOR DELETE
-  TO authenticated
-  USING (auth.uid() = user_id);
+CREATE TRIGGER update_guests_timestamp
+  BEFORE UPDATE ON public.guests
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_timestamp();
 
--- Create vendors table
-CREATE TABLE IF NOT EXISTS vendors (
+CREATE INDEX IF NOT EXISTS guests_user_id_idx ON public.guests(user_id);
+CREATE INDEX IF NOT EXISTS guests_rsvp_status_idx ON public.guests(rsvp_status);
+
+-- =====================================================
+-- 5. Vendors
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.vendors (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
   name text NOT NULL,
   category text NOT NULL,
   email text,
@@ -249,66 +157,53 @@ CREATE TABLE IF NOT EXISTS vendors (
   updated_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE vendors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vendors ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own vendors"
-  ON vendors FOR SELECT
-  TO authenticated
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own vendors"
-  ON vendors FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own vendors"
-  ON vendors FOR UPDATE
-  TO authenticated
+CREATE POLICY "Users manage own vendors"
+  ON public.vendors
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can delete own vendors"
-  ON vendors FOR DELETE
-  TO authenticated
-  USING (auth.uid() = user_id);
+CREATE TRIGGER update_vendors_timestamp
+  BEFORE UPDATE ON public.vendors
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_timestamp();
 
--- Create gallery_items table
-CREATE TABLE IF NOT EXISTS gallery_items (
+CREATE INDEX IF NOT EXISTS vendors_user_id_idx ON public.vendors(user_id);
+
+-- =====================================================
+-- 6. Gallery Items
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.gallery_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  user_id uuid REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
   title text NOT NULL,
   image_url text NOT NULL,
   category text DEFAULT 'General',
   notes text,
   is_favorite boolean DEFAULT false,
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE gallery_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gallery_items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own gallery items"
-  ON gallery_items FOR SELECT
-  TO authenticated
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert own gallery items"
-  ON gallery_items FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own gallery items"
-  ON gallery_items FOR UPDATE
-  TO authenticated
+CREATE POLICY "Users manage own gallery items"
+  ON public.gallery_items
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can delete own gallery items"
-  ON gallery_items FOR DELETE
-  TO authenticated
-  USING (auth.uid() = user_id);
+CREATE TRIGGER update_gallery_items_timestamp
+  BEFORE UPDATE ON public.gallery_items
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_timestamp();
 
--- Create contact_submissions table
-CREATE TABLE IF NOT EXISTS contact_submissions (
+CREATE INDEX IF NOT EXISTS gallery_items_user_id_idx ON public.gallery_items(user_id);
+
+-- =====================================================
+-- 7. Contact Submissions
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.contact_submissions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   email text NOT NULL,
@@ -316,34 +211,29 @@ CREATE TABLE IF NOT EXISTS contact_submissions (
   created_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE contact_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.contact_submissions ENABLE ROW LEVEL SECURITY;
 
+-- Allow both anonymous and logged-in users to submit
 CREATE POLICY "Anyone can submit contact form"
-  ON contact_submissions FOR INSERT
+  ON public.contact_submissions
+  FOR INSERT
   TO anon, authenticated
   WITH CHECK (true);
 
--- Create function to automatically create profile on signup
+-- =====================================================
+-- 8. Auto-create profile on signup
+-- =====================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
   INSERT INTO public.profiles (id, full_name)
-  VALUES (new.id, new.raw_user_meta_data->>'full_name');
+  VALUES (new.id, COALESCE(new.raw_user_meta_data->>'full_name', ''));
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger to call function on new user signup
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Create indexes for better query performance
-CREATE INDEX IF NOT EXISTS tasks_user_id_idx ON tasks(user_id);
-CREATE INDEX IF NOT EXISTS expenses_user_id_idx ON expenses(user_id);
-CREATE INDEX IF NOT EXISTS guests_user_id_idx ON guests(user_id);
-CREATE INDEX IF NOT EXISTS vendors_user_id_idx ON vendors(user_id);
-CREATE INDEX IF NOT EXISTS gallery_items_user_id_idx ON gallery_items(user_id);
-CREATE INDEX IF NOT EXISTS tasks_completed_idx ON tasks(completed);
-CREATE INDEX IF NOT EXISTS guests_rsvp_status_idx ON guests(rsvp_status);
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();

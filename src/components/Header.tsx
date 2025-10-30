@@ -1,4 +1,4 @@
-import { Heart, Search, LogIn, UserPlus, LogOut, User } from 'lucide-react';
+import { Search, LogIn, UserPlus, LogOut, User } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
@@ -48,9 +48,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               onClick={() => onNavigate('home')}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
-              <div className="w-10 h-10 bg-pink-300 rounded-full flex items-center justify-center">
-                <Heart className="w-5 h-5 text-white fill-white" />
-              </div>
+
               <span className="text-2xl font-serif text-pink-300">DreamDay</span>
             </button>
 
