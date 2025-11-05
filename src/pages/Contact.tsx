@@ -19,9 +19,23 @@ export default function Contact() {
     setSuccess(false);
 
     try {
-      const { error } = await supabase.from('contact_submissions').insert([formData]);
+      const { error: dbError } = await supabase.from('contact_submissions').insert([formData]);
 
-      if (error) throw error;
+      if (dbError) throw dbError;
+
+      const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-contact-email`;
+      const emailResponse = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!emailResponse.ok) {
+        console.error('Email sending failed:', emailResponse.statusText);
+      }
 
       setSuccess(true);
       setFormData({
